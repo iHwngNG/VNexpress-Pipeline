@@ -184,13 +184,58 @@ class RSSListScraper:
             return False
 
 
-if __name__ == "__main__":
-    scraper = RSSListScraper()
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-    # Fetch and parse RSS list
+
+def scrape_vnexpress_rss_list(
+    timeout: int = 30, max_retries: int = 3
+) -> List[Dict[str, str]]:
+    """
+    Convenience function to scrape VNExpress RSS list
+
+    Args:
+        timeout: Request timeout in seconds
+        max_retries: Maximum number of retries
+
+    Returns:
+        List of RSS feeds with category and url
+
+    Example:
+        >>> rss_list = scrape_vnexpress_rss_list()
+        >>> print(f"Found {len(rss_list)} RSS feeds")
+        >>> for feed in rss_list:
+        ...     print(f"{feed['category']}: {feed['rss_url']}")
+    """
+    scraper = RSSListScraper(timeout=timeout, max_retries=max_retries)
+    return scraper.scrape_rss_list()
+
+
+# ============================================================================
+# EXAMPLE USAGE
+# ============================================================================
+
+if __name__ == "__main__":
+    # Example 1: Using utility function
+    print("\n" + "=" * 80)
+    print("Example 1: Using utility function")
+    print("=" * 80)
+
+    rss_list = scrape_vnexpress_rss_list()
+
+    print(f"\n✅ Found {len(rss_list)} RSS feeds")
+    for i, feed in enumerate(rss_list[:5]):
+        print(f"[{i+1}] {feed['category']}: {feed['rss_url']}")
+
+    # Example 2: Using class directly (if needed)
+    print("\n" + "=" * 80)
+    print("Example 2: Using class directly")
+    print("=" * 80)
+
+    scraper = RSSListScraper()
     rss_list = scraper.scrape_rss_list()
 
-    # Save to default location (src/rss_feeds.json)
+    # Save to JSON
     scraper.save_to_json(rss_list)
-
-    print(f"Saved {len(rss_list)} RSS feeds to src/rss_feeds.json")
+    print(f"\n✅ Saved {len(rss_list)} RSS feeds to src/rss_feeds.json")

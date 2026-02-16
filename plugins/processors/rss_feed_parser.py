@@ -242,7 +242,7 @@ class RSSFeedParser:
         self, feeds: List[Dict[str, str]], max_articles_per_feed: Optional[int] = None
     ) -> List[Dict]:
         """
-        Parse multiple RSS feeds
+        Parse multiple RSS feeds (sequential)
 
         Args:
             feeds: List of feed dicts with 'url' and 'category' keys
@@ -279,6 +279,83 @@ class RSSFeedParser:
         logger.info(f"\n✅ Total articles parsed: {len(all_articles)}")
         return all_articles
 
+    def parse_multiple_feeds_parallel(
+        self,
+        feeds: List[Dict[str, str]],
+        max_articles_per_feed: Optional[int] = None,
+        max_workers: int = 5,
+    ) -> List[Dict]:
+        """
+        Parse multiple RSS feeds in parallel (concurrent)
+
+        Args:
+            feeds: List of feed dicts with 'url' and 'category' keys
+            max_articles_per_feed: Maximum articles per feed (None = unlimited)
+            max_workers: Maximum number of parallel workers
+
+        Returns:
+            List of all articles from all feeds
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        all_articles = []
+
+        logger.info(
+            f"🔄 Parsing {len(feeds)} RSS feeds in parallel (max_workers={max_workers})..."
+        )
+
+        def parse_single_feed(feed_data: tuple) -> tuple:
+            """Helper function to parse a single feed"""
+            idx, feed = feed_data
+            url = feed.get("url")
+            category = feed.get("category")
+
+            try:
+                logger.info(f"[{idx+1}/{len(feeds)}] Starting: {category} - {url}")
+                articles = self.parse_rss_url(url, category)
+
+                # Limit articles if specified
+                if max_articles_per_feed and len(articles) > max_articles_per_feed:
+                    articles = articles[:max_articles_per_feed]
+                    logger.info(
+                        f"[{idx+1}/{len(feeds)}] Limited to {max_articles_per_feed} articles"
+                    )
+
+                logger.info(
+                    f"[{idx+1}/{len(feeds)}] ✅ Completed: {len(articles)} articles"
+                )
+                return (idx, articles, None)
+
+            except Exception as e:
+                logger.error(f"[{idx+1}/{len(feeds)}] ❌ Failed: {e}")
+                return (idx, [], str(e))
+
+        # Parse feeds in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_feed = {
+                executor.submit(parse_single_feed, (idx, feed)): (idx, feed)
+                for idx, feed in enumerate(feeds)
+            }
+
+            # Collect results as they complete
+            results = []
+            for future in as_completed(future_to_feed):
+                idx, articles, error = future.result()
+                results.append((idx, articles, error))
+
+        # Sort results by original order
+        results.sort(key=lambda x: x[0])
+
+        # Collect all articles
+        for idx, articles, error in results:
+            if error:
+                logger.warning(f"Feed {idx+1} failed: {error}")
+            all_articles.extend(articles)
+
+        logger.info(f"\n✅ Total articles parsed: {len(all_articles)}")
+        return all_articles
+
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -292,7 +369,7 @@ def parse_rss_feeds(
     max_articles_per_feed: Optional[int] = None,
 ) -> List[Dict]:
     """
-    Convenience function để parse multiple RSS feeds
+    Convenience function để parse multiple RSS feeds (Sequential)
 
     Args:
         feeds: List of feed dicts with 'url' and 'category' keys
@@ -312,6 +389,41 @@ def parse_rss_feeds(
     """
     parser = RSSFeedParser(timeout=timeout, max_retries=max_retries)
     return parser.parse_multiple_feeds(feeds, max_articles_per_feed)
+
+
+def parse_rss_feeds_parallel(
+    feeds: List[Dict[str, str]],
+    timeout: int = 30,
+    max_retries: int = 3,
+    max_articles_per_feed: Optional[int] = None,
+    max_workers: int = 5,
+) -> List[Dict]:
+    """
+    Convenience function để parse multiple RSS feeds (Parallel)
+
+    Uses ThreadPoolExecutor for concurrent parsing
+
+    Args:
+        feeds: List of feed dicts with 'url' and 'category' keys
+        timeout: Request timeout
+        max_retries: Max retries
+        max_articles_per_feed: Max articles per feed
+        max_workers: Number of parallel workers
+
+    Returns:
+        List of all articles
+
+    Example:
+        >>> feeds = [
+        ...     {"url": "https://example.com/rss", "category": "News"},
+        ...     {"url": "https://example.com/tech.rss", "category": "Tech"}
+        ... ]
+        >>> articles = parse_rss_feeds_parallel(feeds, max_workers=5)
+    """
+    parser = RSSFeedParser(timeout=timeout, max_retries=max_retries)
+    return parser.parse_multiple_feeds_parallel(
+        feeds, max_articles_per_feed, max_workers
+    )
 
 
 # ============================================================================

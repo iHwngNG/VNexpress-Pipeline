@@ -4,10 +4,13 @@ FROM apache/airflow:2.8.1-python3.11
 # Switch to root để cài system packages
 USER root
 
-# Install system dependencies nếu cần
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
+    libxml2-dev \
+    libxslt-dev \
+    python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

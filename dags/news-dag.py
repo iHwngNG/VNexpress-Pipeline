@@ -13,7 +13,6 @@ import pyarrow.parquet as pq
 
 # Import custom modules
 # Import từ plugins folder (Airflow tự động add plugins vào PYTHONPATH)
-from scrapers.rss_scaper import RSSListScraper
 from storage.short_memory_manager import (
     init_storage,
     StorageBackend,
@@ -92,6 +91,8 @@ def vnexpress_etl_pipeline():
         Returns:
             dict with metadata
         """
+        from scrapers.rss_scaper import scrape_vnexpress_rss_list
+
         logger.info("=" * 80)
         logger.info("TASK 1: Scraping RSS List")
         logger.info("=" * 80)
@@ -100,9 +101,8 @@ def vnexpress_etl_pipeline():
         run_id = context["ds"]  # YYYY-MM-DD
         task_id = context["task"].task_id
 
-        # Scrape RSS list
-        scraper = RSSListScraper(timeout=30, max_retries=3)
-        rss_list = scraper.scrape_rss_list()
+        # Scrape RSS list using utility function
+        rss_list = scrape_vnexpress_rss_list(timeout=30, max_retries=3)
 
         if not rss_list:
             raise Exception("Failed to scrape RSS list")
@@ -138,7 +138,6 @@ def vnexpress_etl_pipeline():
             Validation results với cleaned data
         """
         from processors.rss_data_processor import process_rss_data
-        import pyarrow as pa
 
         logger.info("=" * 80)
         logger.info("TASK 2: Validating & Cleaning RSS Data (PyArrow)")
@@ -265,8 +264,7 @@ def vnexpress_etl_pipeline():
         Returns:
             Metadata with parsed articles count
         """
-        from processors.rss_feed_parser import RSSFeedParser
-        import pyarrow as pa
+        from processors.rss_feed_parser import parse_rss_feeds_parallel
 
         logger.info("=" * 80)
         logger.info("TASK 3: Parsing RSS Feeds & Extracting Articles")
@@ -299,15 +297,15 @@ def vnexpress_etl_pipeline():
         for idx, row in df.iterrows():
             feeds.append({"url": row["rss_url"], "category": row["category"]})
 
-        logger.info(f"🔄 Starting to parse {len(feeds)} RSS feeds...")
-
-        # Parse RSS feeds
-        parser = RSSFeedParser(timeout=30, max_retries=3)
-
         try:
-            # Parse all feeds
-            articles = parser.parse_multiple_feeds(
-                feeds, max_articles_per_feed=None  # Get all articles
+            # Parse all feeds in parallel using utility function
+            # TESTING: Limit to 3 articles per feed for faster testing
+            articles = parse_rss_feeds_parallel(
+                feeds=feeds,
+                timeout=30,
+                max_retries=3,
+                max_articles_per_feed=3,  # Limit to 3 articles per feed for testing
+                max_workers=3,  # Parallel workers
             )
 
             logger.info(f"\n✅ Successfully parsed {len(articles)} articles")
@@ -323,10 +321,26 @@ def vnexpress_etl_pipeline():
                     "success": False,
                 }
 
-            # Convert to DataFrame
-            df_articles = pd.DataFrame(articles)
+            # Deduplicate articles (optimized - exact match only)
+            from processors.article_deduplicator import deduplicate_articles
 
-            logger.info(f"� Articles DataFrame: {df_articles.shape}")
+            logger.info(f"\n🔄 Deduplicating articles...")
+            articles_clean = deduplicate_articles(
+                articles,
+                by_url=True,  # Remove exact duplicate URLs
+                by_guid=True,  # Remove exact duplicate GUIDs
+                by_title_and_content=True,  # Remove exact duplicate title+content
+                keep="first",
+            )
+
+            logger.info(
+                f"✅ Deduplication complete: {len(articles_clean)} unique articles"
+            )
+
+            # Convert to DataFrame
+            df_articles = pd.DataFrame(articles_clean)
+
+            logger.info(f"📊 Articles DataFrame: {df_articles.shape}")
             logger.info(f"   Columns: {list(df_articles.columns)}")
 
             # Convert to PyArrow Table for efficient storage
@@ -369,15 +383,437 @@ def vnexpress_etl_pipeline():
             }
 
     @task
+    def scrape_article_contents(metadata: dict) -> dict:
+        """
+        Task 4: Scrape Full Article Content & Metadata (Parallel)
+
+        Fetch full content và metadata từ URL của từng bài báo
+        Sử dụng parallel processing để tăng tốc độ
+
+        Args:
+            metadata: Metadata từ parse_rss_feeds task
+
+        Returns:
+            Metadata with scraped articles count
+        """
+        from scrapers.article_content_scraper import (
+            scrape_multiple_article_contents_parallel,
+        )
+
+        logger.info("=" * 80)
+        logger.info("TASK 4: Scraping Article Contents (Parallel)")
+        logger.info("=" * 80)
+
+        # Load articles from previous task
+        logger.info(
+            f"Loading articles from task: {metadata['task_id']}, run_id: {metadata['run_id']}"
+        )
+
+        data = load_output(
+            task_id=metadata["task_id"],
+            run_id=metadata["run_id"],
+        )
+
+        # Convert to DataFrame
+        if isinstance(data, pd.DataFrame):
+            df = data
+        elif isinstance(data, pa.Table):
+            df = data.to_pandas()
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame(data)
+
+        logger.info(f"📂 Loaded {len(df)} articles to scrape")
+
+        if len(df) == 0:
+            logger.warning("⚠️  No articles to scrape")
+            return {
+                "task_id": "scrape_article_contents",
+                "run_id": metadata["run_id"],
+                "scraped_count": 0,
+                "success": False,
+            }
+
+        # Convert to list of dicts
+        articles_to_scrape = df.to_dict("records")
+
+        try:
+            # Scrape articles in parallel using utility function
+            scraped_articles = scrape_multiple_article_contents_parallel(
+                articles=articles_to_scrape,
+                url_field="link",
+                category_field="category",
+                timeout=30,
+                max_retries=3,
+                max_workers=5,
+            )
+
+            if len(scraped_articles) == 0:
+                logger.error("❌ No articles were scraped successfully")
+                return {
+                    "task_id": "scrape_article_contents",
+                    "run_id": metadata["run_id"],
+                    "scraped_count": 0,
+                    "failed_count": len(articles_to_scrape),
+                    "success": False,
+                }
+
+            # Convert to DataFrame
+            df_scraped = pd.DataFrame(scraped_articles)
+
+            logger.info(f"\n📊 Scraped DataFrame: {df_scraped.shape}")
+            logger.info(f"   Columns: {list(df_scraped.columns)}")
+
+            # Convert to PyArrow Table
+            table_scraped = pa.Table.from_pandas(df_scraped)
+
+            # Save to storage
+            current_task_id = "scrape_article_contents"
+            run_id = metadata["run_id"]
+
+            storage_path = save_output(
+                task_id=current_task_id,
+                data=table_scraped,
+                run_id=run_id,
+            )
+
+            logger.info(
+                f"\n💾 Saved {len(df_scraped)} scraped articles to: {storage_path}"
+            )
+            logger.info(f"   Format: Parquet (PyArrow Table)")
+
+            failed_count = len(articles_to_scrape) - len(scraped_articles)
+
+            return {
+                "task_id": current_task_id,
+                "run_id": run_id,
+                "scraped_count": len(df_scraped),
+                "failed_count": failed_count,
+                "storage_path": storage_path,
+                "success": True,
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to scrape articles: {e}")
+            return {
+                "task_id": "scrape_article_contents",
+                "run_id": metadata["run_id"],
+                "scraped_count": 0,
+                "success": False,
+                "error": str(e),
+            }
+
+    @task
+    def chunk_articles(metadata: dict) -> dict:
+        """
+        Task 5: Chunk Articles into Semantic Chunks
+
+        Split article content into meaningful chunks based on semantic boundaries
+
+        Args:
+            metadata: Metadata từ scrape_article_contents task
+
+        Returns:
+            Metadata with chunked articles count
+        """
+        from processors.text_chunker import chunk_articles_parallel as chunk_articles_fn
+
+        logger.info("=" * 80)
+        logger.info("TASK 5: Chunking Articles (Semantic)")
+        logger.info("=" * 80)
+
+        # Load scraped articles from previous task
+        logger.info(
+            f"Loading articles from task: {metadata['task_id']}, run_id: {metadata['run_id']}"
+        )
+
+        data = load_output(
+            task_id=metadata["task_id"],
+            run_id=metadata["run_id"],
+        )
+
+        # Convert to DataFrame
+        if isinstance(data, pd.DataFrame):
+            df = data
+        elif isinstance(data, pa.Table):
+            df = data.to_pandas()
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame(data)
+
+        logger.info(f"📂 Loaded {len(df)} articles to chunk")
+
+        if len(df) == 0:
+            logger.warning("⚠️  No articles to chunk")
+            return {
+                "task_id": "chunk_articles",
+                "run_id": metadata["run_id"],
+                "chunk_count": 0,
+                "success": False,
+            }
+
+        # Convert to list of dicts
+        articles_to_chunk = df.to_dict("records")
+
+        try:
+            # Chunk articles using parallel utility function
+            chunks = chunk_articles_fn(
+                articles=articles_to_chunk,
+                content_field="content",
+                metadata_fields=[
+                    "title",
+                    "category",
+                    "published_date",
+                    "link",
+                    "description",
+                ],
+                min_chunk_size=500,
+                max_chunk_size=1500,
+                target_chunk_size=1000,
+                overlap_sentences=2,
+                max_workers=5,  # Parallel workers
+            )
+
+            if len(chunks) == 0:
+                logger.error("❌ No chunks were created")
+                return {
+                    "task_id": "chunk_articles",
+                    "run_id": metadata["run_id"],
+                    "chunk_count": 0,
+                    "article_count": len(articles_to_chunk),
+                    "success": False,
+                }
+
+            # Convert to DataFrame
+            df_chunks = pd.DataFrame(chunks)
+
+            logger.info(f"\n📊 Chunks DataFrame: {df_chunks.shape}")
+            logger.info(f"   Columns: {list(df_chunks.columns)}")
+            logger.info(f"   Total chunks: {len(df_chunks)}")
+            logger.info(
+                f"   Avg chunks per article: {len(df_chunks) / len(articles_to_chunk):.2f}"
+            )
+
+            # Convert to PyArrow Table
+            table_chunks = pa.Table.from_pandas(df_chunks)
+
+            # Save to storage
+            current_task_id = "chunk_articles"
+            run_id = metadata["run_id"]
+
+            storage_path = save_output(
+                task_id=current_task_id,
+                data=table_chunks,
+                run_id=run_id,
+            )
+
+            logger.info(f"\n💾 Saved {len(df_chunks)} chunks to: {storage_path}")
+            logger.info(f"   Format: Parquet (PyArrow Table)")
+
+            return {
+                "task_id": current_task_id,
+                "run_id": run_id,
+                "chunk_count": len(df_chunks),
+                "article_count": len(articles_to_chunk),
+                "storage_path": storage_path,
+                "success": True,
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to chunk articles: {e}")
+            return {
+                "task_id": "chunk_articles",
+                "run_id": metadata["run_id"],
+                "chunk_count": 0,
+                "success": False,
+                "error": str(e),
+            }
+
+    @task
+    def vectorize_chunks(metadata: dict) -> dict:
+        """
+        Task 6: Vectorize Chunks and Insert into ChromaDB (Parallel)
+
+        Vectorize text chunks using embeddings and store in ChromaDB
+        Uses batch processing for efficiency
+
+        Args:
+            metadata: Metadata từ chunk_articles task
+
+        Returns:
+            Metadata with vectorization stats
+        """
+        from processors.vectorizer import create_vectorizer
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        logger.info("=" * 80)
+        logger.info("TASK 6: Vectorizing Chunks & Inserting to ChromaDB")
+        logger.info("=" * 80)
+
+        # Load chunks from previous task
+        logger.info(
+            f"Loading chunks from task: {metadata['task_id']}, run_id: {metadata['run_id']}"
+        )
+
+        data = load_output(
+            task_id=metadata["task_id"],
+            run_id=metadata["run_id"],
+        )
+
+        # Convert to DataFrame
+        if isinstance(data, pd.DataFrame):
+            df = data
+        elif isinstance(data, pa.Table):
+            df = data.to_pandas()
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame(data)
+
+        logger.info(f"📂 Loaded {len(df)} chunks to vectorize")
+
+        if len(df) == 0:
+            logger.warning("⚠️  No chunks to vectorize")
+            return {
+                "task_id": "vectorize_chunks",
+                "run_id": metadata["run_id"],
+                "vectorized_count": 0,
+                "success": False,
+            }
+
+        try:
+            # Create vectorizer
+            logger.info("🔄 Creating vectorizer...")
+            vectorizer = create_vectorizer(
+                model_type="sentence-transformers",
+                model_name="all-MiniLM-L6-v2",  # CPU-friendly model
+                device="cpu",
+                chroma_path="./chroma_db",
+                collection_name="news_articles",
+            )
+
+            # Convert to list of dicts
+            chunks_list = df.to_dict("records")
+
+            # Batch processing for parallel vectorization
+            batch_size = 50  # Process 50 chunks at a time
+            total_batches = (len(chunks_list) + batch_size - 1) // batch_size
+
+            logger.info(
+                f"🔄 Processing {len(chunks_list)} chunks in {total_batches} batches (batch_size={batch_size})..."
+            )
+
+            total_vectorized = 0
+            total_inserted = 0
+            failed_batches = 0
+
+            def process_batch(batch_data):
+                """Helper to process single batch"""
+                batch_idx, batch = batch_data
+                try:
+                    result = vectorizer.vectorize_chunks(
+                        chunks=batch,
+                        text_field="chunk_text",
+                        metadata_fields=[
+                            "title",
+                            "category",
+                            "published_date",
+                            "link",
+                            "chunk_id",
+                            "total_chunks",
+                        ],
+                    )
+                    return (batch_idx, result)
+                except Exception as e:
+                    logger.error(f"Error processing batch {batch_idx}: {e}")
+                    return (batch_idx, {"success": False, "error": str(e)})
+
+            # Parallel batch processing
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                # Create batches
+                batches = []
+                for i in range(0, len(chunks_list), batch_size):
+                    batch = chunks_list[i : i + batch_size]
+                    batches.append((i // batch_size, batch))
+
+                # Submit all batch tasks
+                future_to_batch = {
+                    executor.submit(process_batch, batch_data): batch_data[0]
+                    for batch_data in batches
+                }
+
+                # Process completed batches
+                for future in as_completed(future_to_batch):
+                    batch_idx = future_to_batch[future]
+                    try:
+                        idx, result = future.result()
+
+                        if result.get("success"):
+                            vectorized = result.get("vectorized", 0)
+                            inserted = result.get("inserted", 0)
+                            total_vectorized += vectorized
+                            total_inserted += inserted
+                            logger.info(
+                                f"[Batch {idx+1}/{total_batches}] ✅ Vectorized: {vectorized}, Inserted: {inserted}"
+                            )
+                        else:
+                            failed_batches += 1
+                            logger.warning(f"[Batch {idx+1}/{total_batches}] ⚠️  Failed")
+
+                    except Exception as e:
+                        failed_batches += 1
+                        logger.error(
+                            f"[Batch {batch_idx+1}/{total_batches}] ❌ Error: {e}"
+                        )
+
+            logger.info(f"\n✅ Vectorization complete:")
+            logger.info(f"   Total chunks: {len(chunks_list)}")
+            logger.info(f"   Vectorized: {total_vectorized}")
+            logger.info(f"   Inserted: {total_inserted}")
+            logger.info(f"   Failed batches: {failed_batches}")
+
+            # Get collection stats
+            stats = vectorizer.get_collection_stats()
+            logger.info(f"\n📊 ChromaDB Collection Stats:")
+            logger.info(f"   Collection: {stats['collection_name']}")
+            logger.info(f"   Total chunks in DB: {stats['total_chunks']}")
+            logger.info(f"   Model: {stats['embedding_model']}")
+            logger.info(f"   Dimension: {stats['embedding_dimension']}")
+
+            return {
+                "task_id": "vectorize_chunks",
+                "run_id": metadata["run_id"],
+                "total_chunks": len(chunks_list),
+                "vectorized_count": total_vectorized,
+                "inserted_count": total_inserted,
+                "failed_batches": failed_batches,
+                "collection_name": stats["collection_name"],
+                "total_in_db": stats["total_chunks"],
+                "success": True,
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to vectorize chunks: {e}")
+            return {
+                "task_id": "vectorize_chunks",
+                "run_id": metadata["run_id"],
+                "vectorized_count": 0,
+                "success": False,
+                "error": str(e),
+            }
+
+    @task
     def cleanup_temp_data(metadata: dict) -> dict:
         """
-        Task 4: Cleanup temporary data từ các task trước
+        Task 7: Cleanup temporary data từ các task trước
 
         Args:
             metadata: Metadata từ task trước
         """
         logger.info("=" * 80)
-        logger.info("TASK 4: Cleaning up temporary data")
+        logger.info("TASK 7: Cleaning up temporary data")
         logger.info("=" * 80)
 
         run_id = metadata["run_id"]
@@ -404,7 +840,10 @@ def vnexpress_etl_pipeline():
     rss_metadata = scrape_rss_list()
     validation_result = validate_rss_list(rss_metadata)
     parsing_result = parse_rss_feeds(validation_result)
-    cleanup_result = cleanup_temp_data(parsing_result)
+    scraping_result = scrape_article_contents(parsing_result)
+    chunking_result = chunk_articles(scraping_result)
+    vectorization_result = vectorize_chunks(chunking_result)
+    cleanup_result = cleanup_temp_data(vectorization_result)
 
     # Set dependencies
     (
@@ -412,6 +851,9 @@ def vnexpress_etl_pipeline():
         >> rss_metadata
         >> validation_result
         >> parsing_result
+        >> scraping_result
+        >> chunking_result
+        >> vectorization_result
         >> cleanup_result
     )
 
