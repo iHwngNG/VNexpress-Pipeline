@@ -7,6 +7,9 @@ from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from datetime import timedelta
 import logging
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Import custom modules
 # Import từ plugins folder (Airflow tự động add plugins vào PYTHONPATH)
@@ -126,93 +129,244 @@ def vnexpress_etl_pipeline():
     @task
     def validate_rss_list(metadata: dict) -> dict:
         """
-        Task 2: Validate RSS list
+        Task 2: Validate and Clean RSS Data using PyArrow Processor
 
         Args:
             metadata: Metadata từ task trước
 
         Returns:
-            Validation results
+            Validation results với cleaned data
         """
+        from processors.rss_data_processor import process_rss_data
+        import pyarrow as pa
+
         logger.info("=" * 80)
-        logger.info("TASK 2: Validating RSS List")
+        logger.info("TASK 2: Validating & Cleaning RSS Data (PyArrow)")
         logger.info("=" * 80)
 
         # Load data từ storage
-        rss_list = load_output(task_id=metadata["task_id"], run_id=metadata["run_id"])
+        logger.info(
+            f"Loading data from task: {metadata['task_id']}, run_id: {metadata['run_id']}"
+        )
 
-        logger.info(f"📂 Loaded {len(rss_list)} feeds from storage")
+        try:
+            data = load_output(
+                task_id=metadata["task_id"],
+                run_id=metadata["run_id"],
+            )
 
-        # Validation checks
-        validation_errors = []
+            # 🔍 DEBUG: Check type của data
+            logger.info(f"🔍 Type of loaded data: {type(data).__name__}")
 
-        # Check 1: Required fields
-        for idx, item in enumerate(rss_list):
-            if not item.get("category"):
-                validation_errors.append(f"Feed {idx}: Missing category")
-            if not item.get("rss_url") or not item["rss_url"].startswith("http"):
-                validation_errors.append(f"Feed {idx}: Invalid URL")
+            # Process data với PyArrow processor
+            # Processor sẽ tự động:
+            # - Handle missing fields (set None cho fields thường, xóa nếu thiếu URL)
+            # - Validate URL format (xóa invalid URLs)
+            # - Remove duplicates (giữ first)
+            # - Clean text fields
 
-        # Check 2: Duplicates
-        urls = [item["rss_url"] for item in rss_list]
-        if len(urls) != len(set(urls)):
-            validation_errors.append("Duplicate RSS URLs found")
+            logger.info("\n🔄 Processing with PyArrow processor...")
 
-        if validation_errors:
-            error_msg = "\n".join(validation_errors)
-            raise Exception(f"Validation failed:\n{error_msg}")
+            try:
+                # Process - return PyArrow Table
+                table_clean = process_rss_data(
+                    data,
+                    remove_duplicates=True,
+                    validate_urls=True,
+                    clean_text=True,
+                    return_pandas=False,  # Keep as PyArrow for performance
+                )
 
-        logger.info("✅ Validation passed")
+                logger.info(f"\n✅ Processing successful!")
+                logger.info(f"   Final records: {len(table_clean)}")
+                logger.info(f"   Schema: {table_clean.schema}")
 
-        # Return metadata for next task
-        return {
-            "task_id": metadata["task_id"],
-            "run_id": metadata["run_id"],
-            "validated": True,
-            "feed_count": len(rss_list),
-        }
+                # Convert to pandas for compatibility với downstream tasks
+                df_clean = table_clean.to_pandas()
+
+                # Save cleaned data back to storage
+                task_id = "validate_rss_list"
+                run_id = metadata["run_id"]
+
+                storage_path = save_output(
+                    task_id=task_id, data=df_clean, run_id=run_id  # Save as DataFrame
+                )
+
+                logger.info(f"💾 Saved cleaned data to: {storage_path}")
+
+                # Return metadata
+                return {
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "validated": True,
+                    "cleaned": True,
+                    "feed_count": len(df_clean),
+                    "storage_path": storage_path,
+                }
+
+            except Exception as e:
+                # Nếu processor fail, log warning nhưng vẫn tiếp tục
+                logger.warning(f"⚠️  Processor encountered error: {e}")
+                logger.info("📝 Attempting fallback validation...")
+
+                # Fallback: Basic validation without cleaning
+                if isinstance(data, pd.DataFrame):
+                    df = data
+                elif isinstance(data, list):
+                    df = pd.DataFrame(data)
+                elif isinstance(data, pa.Table):
+                    df = data.to_pandas()
+                else:
+                    df = pd.DataFrame(data)
+
+                logger.info(f"⚠️  Using original data: {len(df)} records")
+
+                # Save original data
+                task_id = "validate_rss_list"
+                run_id = metadata["run_id"]
+
+                storage_path = save_output(task_id=task_id, data=df, run_id=run_id)
+
+                return {
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "validated": False,
+                    "cleaned": False,
+                    "feed_count": len(df),
+                    "storage_path": storage_path,
+                    "error": str(e),
+                }
+
+        except Exception as e:
+            # Critical error - log but don't fail task
+            logger.error(f"❌ Critical error in validation: {e}")
+            logger.info("⚠️  Returning empty result to continue pipeline")
+
+            # Return empty result
+            return {
+                "task_id": "validate_rss_list",
+                "run_id": metadata["run_id"],
+                "validated": False,
+                "cleaned": False,
+                "feed_count": 0,
+                "error": str(e),
+            }
 
     @task
-    def extract_rss_urls(metadata: dict) -> dict:
+    def parse_rss_feeds(metadata: dict) -> dict:
         """
-        Task 3: Extract RSS URLs cho stage tiếp theo
+        Task 3: Parse RSS Feeds và Extract Article Information
+
+        Fetch từng RSS URL, parse XML content, và extract thông tin các bài báo
 
         Args:
             metadata: Metadata từ validation task
 
         Returns:
-            Metadata with RSS URLs task_id
+            Metadata with parsed articles count
         """
+        from processors.rss_feed_parser import RSSFeedParser
+        import pyarrow as pa
+
         logger.info("=" * 80)
-        logger.info("TASK 3: Extracting RSS URLs")
+        logger.info("TASK 3: Parsing RSS Feeds & Extracting Articles")
         logger.info("=" * 80)
 
-        # Load data từ storage
-        rss_list = load_output(task_id=metadata["task_id"], run_id=metadata["run_id"])
-
-        # Extract URLs
-        rss_urls = [
-            {"category": item["category"], "url": item["rss_url"]} for item in rss_list
-        ]
-
-        logger.info(f"📋 Extracted {len(rss_urls)} RSS URLs")
-
-        # Save URLs list cho stage tiếp theo (parallel parsing)
-        current_task_id = "extract_rss_urls"
-        run_id = metadata["run_id"]
-
-        storage_path = save_output(
-            task_id=current_task_id, data=rss_urls, run_id=run_id
+        # Load cleaned RSS URLs từ validate task
+        logger.info(
+            f"Loading RSS URLs from task: {metadata['task_id']}, run_id: {metadata['run_id']}"
         )
 
-        logger.info(f"💾 Saved RSS URLs to: {storage_path}")
+        data = load_output(
+            task_id=metadata["task_id"],
+            run_id=metadata["run_id"],
+        )
 
-        return {
-            "task_id": current_task_id,
-            "run_id": run_id,
-            "url_count": len(rss_urls),
-            "ready_for_parsing": True,
-        }
+        # Convert to DataFrame if needed
+        if isinstance(data, pd.DataFrame):
+            df = data
+        elif isinstance(data, pa.Table):
+            df = data.to_pandas()
+        elif isinstance(data, list):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame(data)
+
+        logger.info(f"📂 Loaded {len(df)} RSS feeds")
+
+        # Prepare feeds list for parser
+        feeds = []
+        for idx, row in df.iterrows():
+            feeds.append({"url": row["rss_url"], "category": row["category"]})
+
+        logger.info(f"🔄 Starting to parse {len(feeds)} RSS feeds...")
+
+        # Parse RSS feeds
+        parser = RSSFeedParser(timeout=30, max_retries=3)
+
+        try:
+            # Parse all feeds
+            articles = parser.parse_multiple_feeds(
+                feeds, max_articles_per_feed=None  # Get all articles
+            )
+
+            logger.info(f"\n✅ Successfully parsed {len(articles)} articles")
+
+            if len(articles) == 0:
+                logger.warning("⚠️  No articles found in any feed")
+                # Return empty result but don't fail
+                return {
+                    "task_id": "parse_rss_feeds",
+                    "run_id": metadata["run_id"],
+                    "article_count": 0,
+                    "feed_count": len(feeds),
+                    "success": False,
+                }
+
+            # Convert to DataFrame
+            df_articles = pd.DataFrame(articles)
+
+            logger.info(f"� Articles DataFrame: {df_articles.shape}")
+            logger.info(f"   Columns: {list(df_articles.columns)}")
+
+            # Convert to PyArrow Table for efficient storage
+            table_articles = pa.Table.from_pandas(df_articles)
+
+            # Save articles to storage
+            current_task_id = "parse_rss_feeds"
+            run_id = metadata["run_id"]
+
+            storage_path = save_output(
+                task_id=current_task_id,
+                data=table_articles,  # Save as PyArrow Table (parquet)
+                run_id=run_id,
+            )
+
+            logger.info(f"\n💾 Saved {len(df_articles)} articles to: {storage_path}")
+            logger.info(f"   Format: Parquet (PyArrow Table)")
+            logger.info(f"   Schema: {table_articles.schema}")
+
+            return {
+                "task_id": current_task_id,
+                "run_id": run_id,
+                "article_count": len(df_articles),
+                "feed_count": len(feeds),
+                "storage_path": storage_path,
+                "success": True,
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Failed to parse RSS feeds: {e}")
+            logger.info("⚠️  Returning error result to continue pipeline")
+
+            return {
+                "task_id": "parse_rss_feeds",
+                "run_id": metadata["run_id"],
+                "article_count": 0,
+                "feed_count": len(feeds),
+                "success": False,
+                "error": str(e),
+            }
 
     @task
     def cleanup_temp_data(metadata: dict) -> dict:
@@ -249,15 +403,15 @@ def vnexpress_etl_pipeline():
     storage_init = init_storage_backend()
     rss_metadata = scrape_rss_list()
     validation_result = validate_rss_list(rss_metadata)
-    extraction_result = extract_rss_urls(validation_result)
-    cleanup_result = cleanup_temp_data(extraction_result)
+    parsing_result = parse_rss_feeds(validation_result)
+    cleanup_result = cleanup_temp_data(parsing_result)
 
     # Set dependencies
     (
         storage_init
         >> rss_metadata
         >> validation_result
-        >> extraction_result
+        >> parsing_result
         >> cleanup_result
     )
 

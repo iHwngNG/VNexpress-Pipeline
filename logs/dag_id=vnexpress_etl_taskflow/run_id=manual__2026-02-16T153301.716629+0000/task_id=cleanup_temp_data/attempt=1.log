@@ -1,0 +1,21 @@
+[2026-02-16T15:33:08.434+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.cleanup_temp_data manual__2026-02-16T15:33:01.716629+00:00 [queued]>
+[2026-02-16T15:33:08.445+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.cleanup_temp_data manual__2026-02-16T15:33:01.716629+00:00 [queued]>
+[2026-02-16T15:33:08.446+0000] {taskinstance.py:2170} INFO - Starting attempt 1 of 3
+[2026-02-16T15:33:08.463+0000] {taskinstance.py:2191} INFO - Executing <Task(_PythonDecoratedOperator): cleanup_temp_data> on 2026-02-16 15:33:01.716629+00:00
+[2026-02-16T15:33:08.470+0000] {standard_task_runner.py:60} INFO - Started process 1696 to run task
+[2026-02-16T15:33:08.473+0000] {standard_task_runner.py:87} INFO - Running: ['***', 'tasks', 'run', 'vnexpress_etl_taskflow', 'cleanup_temp_data', 'manual__2026-02-16T15:33:01.716629+00:00', '--job-id', '49', '--raw', '--subdir', 'DAGS_FOLDER/news-dag.py', '--cfg-path', '/tmp/tmpqpj8k_r5']
+[2026-02-16T15:33:08.477+0000] {standard_task_runner.py:88} INFO - Job 49: Subtask cleanup_temp_data
+[2026-02-16T15:33:08.574+0000] {task_command.py:423} INFO - Running <TaskInstance: vnexpress_etl_taskflow.cleanup_temp_data manual__2026-02-16T15:33:01.716629+00:00 [running]> on host 773208116fb2
+[2026-02-16T15:33:08.722+0000] {taskinstance.py:2480} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='vnexpress_etl_taskflow' AIRFLOW_CTX_TASK_ID='cleanup_temp_data' AIRFLOW_CTX_EXECUTION_DATE='2026-02-16T15:33:01.716629+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-02-16T15:33:01.716629+00:00'
+[2026-02-16T15:33:08.723+0000] {news-dag.py:338} INFO - ================================================================================
+[2026-02-16T15:33:08.724+0000] {news-dag.py:339} INFO - TASK 4: Cleaning up temporary data
+[2026-02-16T15:33:08.724+0000] {news-dag.py:340} INFO - ================================================================================
+[2026-02-16T15:33:08.725+0000] {short_memory_manager.py:73} INFO - FileStorage initialized at /tmp/***_task_storage
+[2026-02-16T15:33:08.726+0000] {short_memory_manager.py:451} INFO - TaskStorageManager initialized with file backend
+[2026-02-16T15:33:08.727+0000] {short_memory_manager.py:239} INFO - ✅ Deleted scrape_rss_list from /tmp/***_task_storage/2026-02-16/scrape_rss_list
+[2026-02-16T15:33:08.727+0000] {news-dag.py:346} INFO - 🗑️  Cleaned scrape_rss_list: True
+[2026-02-16T15:33:08.728+0000] {news-dag.py:350} INFO - ✅ Cleanup completed
+[2026-02-16T15:33:08.729+0000] {python.py:201} INFO - Done. Returned value was: {'cleaned': True, 'ready_for_next_stage': True}
+[2026-02-16T15:33:08.795+0000] {taskinstance.py:1138} INFO - Marking task as SUCCESS. dag_id=vnexpress_etl_taskflow, task_id=cleanup_temp_data, execution_date=20260216T153301, start_date=20260216T153308, end_date=20260216T153308
+[2026-02-16T15:33:08.847+0000] {local_task_job_runner.py:234} INFO - Task exited with return code 0
+[2026-02-16T15:33:08.879+0000] {taskinstance.py:3280} INFO - 0 downstream tasks scheduled from follow-on schedule check

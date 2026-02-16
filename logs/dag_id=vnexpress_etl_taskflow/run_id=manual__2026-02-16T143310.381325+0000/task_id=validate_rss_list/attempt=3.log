@@ -1,0 +1,60 @@
+[2026-02-16T14:36:58.685+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.validate_rss_list manual__2026-02-16T14:33:10.381325+00:00 [queued]>
+[2026-02-16T14:36:58.694+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.validate_rss_list manual__2026-02-16T14:33:10.381325+00:00 [queued]>
+[2026-02-16T14:36:58.695+0000] {taskinstance.py:2170} INFO - Starting attempt 3 of 5
+[2026-02-16T14:36:58.709+0000] {taskinstance.py:2191} INFO - Executing <Task(_PythonDecoratedOperator): validate_rss_list> on 2026-02-16 14:33:10.381325+00:00
+[2026-02-16T14:36:58.720+0000] {standard_task_runner.py:60} INFO - Started process 327 to run task
+[2026-02-16T14:36:58.724+0000] {standard_task_runner.py:87} INFO - Running: ['***', 'tasks', 'run', 'vnexpress_etl_taskflow', 'validate_rss_list', 'manual__2026-02-16T14:33:10.381325+00:00', '--job-id', '24', '--raw', '--subdir', 'DAGS_FOLDER/news-dag.py', '--cfg-path', '/tmp/tmpc_okcfzh']
+[2026-02-16T14:36:58.730+0000] {standard_task_runner.py:88} INFO - Job 24: Subtask validate_rss_list
+[2026-02-16T14:36:58.839+0000] {task_command.py:423} INFO - Running <TaskInstance: vnexpress_etl_taskflow.validate_rss_list manual__2026-02-16T14:33:10.381325+00:00 [running]> on host 773208116fb2
+[2026-02-16T14:36:58.979+0000] {taskinstance.py:2480} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='vnexpress_etl_taskflow' AIRFLOW_CTX_TASK_ID='validate_rss_list' AIRFLOW_CTX_EXECUTION_DATE='2026-02-16T14:33:10.381325+00:00' AIRFLOW_CTX_TRY_NUMBER='3' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-02-16T14:33:10.381325+00:00'
+[2026-02-16T14:36:58.980+0000] {news-dag.py:137} INFO - ================================================================================
+[2026-02-16T14:36:58.981+0000] {news-dag.py:138} INFO - TASK 2: Validating RSS List
+[2026-02-16T14:36:58.981+0000] {news-dag.py:139} INFO - ================================================================================
+[2026-02-16T14:36:58.982+0000] {news-dag.py:144} INFO - Loading data from task: scrape_rss_list, run_id: 2026-02-16
+[2026-02-16T14:36:58.982+0000] {short_memory_manager.py:73} INFO - FileStorage initialized at /tmp/***_task_storage
+[2026-02-16T14:36:58.983+0000] {short_memory_manager.py:451} INFO - TaskStorageManager initialized with file backend
+[2026-02-16T14:36:59.018+0000] {short_memory_manager.py:216} INFO - ✅ Loaded scrape_rss_list (parquet, 2773 bytes)
+[2026-02-16T14:36:59.020+0000] {news-dag.py:153} INFO - 📂 Loaded 19 feeds from storage
+[2026-02-16T14:36:59.034+0000] {news-dag.py:157} INFO - rss_list:               category                                           rss_url
+0           Trang chủ         https://vnexpress.net/rss/tin-moi-nhat.rss
+1            Thế giới             https://vnexpress.net/rss/the-gioi.rss
+2             Thời sự              https://vnexpress.net/rss/thoi-su.rss
+3          Kinh doanh           https://vnexpress.net/rss/kinh-doanh.rss
+4            Giải trí             https://vnexpress.net/rss/giai-tri.rss
+5            Thể thao             https://vnexpress.net/rss/the-thao.rss
+6           Pháp luật            https://vnexpress.net/rss/phap-luat.rss
+7            Giáo dục             https://vnexpress.net/rss/giao-duc.rss
+8         Tin mới nhất        https://vnexpress.net/rss/tin-moi-nhat.rss
+9          Tin nổi bật         https://vnexpress.net/rss/tin-noi-bat.rss
+10            Sức khỏe            https://vnexpress.net/rss/suc-khoe.rss
+11            Đời sống            https://vnexpress.net/rss/gia-dinh.rss
+12             Du lịch             https://vnexpress.net/rss/du-lich.rss
+13  Khoa học công nghệ  https://vnexpress.net/rss/khoa-hoc-cong-nghe.rss
+14                  Xe          https://vnexpress.net/rss/oto-xe-may.rss
+15              Ý kiến              https://vnexpress.net/rss/y-kien.rss
+16              Tâm sự              https://vnexpress.net/rss/tam-su.rss
+17                Cười                https://vnexpress.net/rss/cuoi.rss
+18       Tin xem nhiều       https://vnexpress.net/rss/tin-xem-nhieu.rss
+[2026-02-16T14:36:59.035+0000] {news-dag.py:160} INFO - Feed 0: category
+[2026-02-16T14:36:59.035+0000] {taskinstance.py:2698} ERROR - Task failed with exception
+Traceback (most recent call last):
+  File "/home/airflow/.local/lib/python3.11/site-packages/airflow/models/taskinstance.py", line 428, in _execute_task
+    result = execute_callable(context=context, **execute_callable_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.11/site-packages/airflow/decorators/base.py", line 241, in execute
+    return_value = super().execute(context)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.11/site-packages/airflow/operators/python.py", line 199, in execute
+    return_value = self.execute_callable()
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/airflow/.local/lib/python3.11/site-packages/airflow/operators/python.py", line 216, in execute_callable
+    return self.python_callable(*self.op_args, **self.op_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/airflow/dags/news-dag.py", line 161, in validate_rss_list
+    if not item.get("category"):
+           ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+[2026-02-16T14:36:59.056+0000] {taskinstance.py:1138} INFO - Marking task as UP_FOR_RETRY. dag_id=vnexpress_etl_taskflow, task_id=validate_rss_list, execution_date=20260216T143310, start_date=20260216T143658, end_date=20260216T143659
+[2026-02-16T14:36:59.071+0000] {standard_task_runner.py:107} ERROR - Failed to execute job 24 for task validate_rss_list ('str' object has no attribute 'get'; 327)
+[2026-02-16T14:36:59.101+0000] {local_task_job_runner.py:234} INFO - Task exited with return code 1
+[2026-02-16T14:36:59.132+0000] {taskinstance.py:3280} INFO - 0 downstream tasks scheduled from follow-on schedule check

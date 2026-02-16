@@ -1,0 +1,30 @@
+[2026-02-16T15:28:06.553+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.extract_rss_urls manual__2026-02-16T15:22:59.498998+00:00 [queued]>
+[2026-02-16T15:28:06.564+0000] {taskinstance.py:1956} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: vnexpress_etl_taskflow.extract_rss_urls manual__2026-02-16T15:22:59.498998+00:00 [queued]>
+[2026-02-16T15:28:06.565+0000] {taskinstance.py:2170} INFO - Starting attempt 2 of 3
+[2026-02-16T15:28:06.585+0000] {taskinstance.py:2191} INFO - Executing <Task(_PythonDecoratedOperator): extract_rss_urls> on 2026-02-16 15:22:59.498998+00:00
+[2026-02-16T15:28:06.592+0000] {standard_task_runner.py:60} INFO - Started process 1544 to run task
+[2026-02-16T15:28:06.596+0000] {standard_task_runner.py:87} INFO - Running: ['***', 'tasks', 'run', 'vnexpress_etl_taskflow', 'extract_rss_urls', 'manual__2026-02-16T15:22:59.498998+00:00', '--job-id', '38', '--raw', '--subdir', 'DAGS_FOLDER/news-dag.py', '--cfg-path', '/tmp/tmpyc_4b47i']
+[2026-02-16T15:28:06.600+0000] {standard_task_runner.py:88} INFO - Job 38: Subtask extract_rss_urls
+[2026-02-16T15:28:06.708+0000] {task_command.py:423} INFO - Running <TaskInstance: vnexpress_etl_taskflow.extract_rss_urls manual__2026-02-16T15:22:59.498998+00:00 [running]> on host 773208116fb2
+[2026-02-16T15:28:06.862+0000] {taskinstance.py:2480} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='data_team' AIRFLOW_CTX_DAG_ID='vnexpress_etl_taskflow' AIRFLOW_CTX_TASK_ID='extract_rss_urls' AIRFLOW_CTX_EXECUTION_DATE='2026-02-16T15:22:59.498998+00:00' AIRFLOW_CTX_TRY_NUMBER='2' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-02-16T15:22:59.498998+00:00'
+[2026-02-16T15:28:06.864+0000] {news-dag.py:267} INFO - ================================================================================
+[2026-02-16T15:28:06.865+0000] {news-dag.py:268} INFO - TASK 3: Extracting RSS URLs
+[2026-02-16T15:28:06.865+0000] {news-dag.py:269} INFO - ================================================================================
+[2026-02-16T15:28:06.866+0000] {news-dag.py:272} INFO - Loading data from task: validate_rss_list, run_id: 2026-02-16
+[2026-02-16T15:28:06.866+0000] {short_memory_manager.py:73} INFO - FileStorage initialized at /tmp/***_task_storage
+[2026-02-16T15:28:06.867+0000] {short_memory_manager.py:451} INFO - TaskStorageManager initialized with file backend
+[2026-02-16T15:28:06.900+0000] {short_memory_manager.py:216} INFO - ✅ Loaded validate_rss_list (parquet, 2773 bytes)
+[2026-02-16T15:28:06.901+0000] {news-dag.py:291} INFO - 📂 Loaded data: 19 records
+[2026-02-16T15:28:06.910+0000] {news-dag.py:302} INFO - 📋 Extracted 19 RSS URLs
+[2026-02-16T15:28:06.911+0000] {news-dag.py:303} INFO -    Columns: ['category', 'url']
+[2026-02-16T15:28:06.918+0000] {short_memory_manager.py:173} INFO - ✅ Saved extract_rss_urls (pickle, 2126 bytes) to /tmp/***_task_storage/2026-02-16/extract_rss_urls/data.pickle
+[2026-02-16T15:28:06.918+0000] {news-dag.py:319} INFO - 💾 Saved RSS URLs to parquet: /tmp/***_task_storage/2026-02-16/extract_rss_urls/data.pickle
+[2026-02-16T15:28:06.919+0000] {news-dag.py:320} INFO -    Format: Parquet (PyArrow Table)
+[2026-02-16T15:28:06.920+0000] {news-dag.py:321} INFO -    Schema: category: string
+url: string
+-- schema metadata --
+pandas: '{"index_columns": [{"kind": "range", "name": null, "start": 0, "' + 482
+[2026-02-16T15:28:06.921+0000] {python.py:201} INFO - Done. Returned value was: {'task_id': 'extract_rss_urls', 'run_id': '2026-02-16', 'url_count': 19, 'ready_for_parsing': True, 'storage_path': '/tmp/***_task_storage/2026-02-16/extract_rss_urls/data.pickle'}
+[2026-02-16T15:28:07.077+0000] {taskinstance.py:1138} INFO - Marking task as SUCCESS. dag_id=vnexpress_etl_taskflow, task_id=extract_rss_urls, execution_date=20260216T152259, start_date=20260216T152806, end_date=20260216T152807
+[2026-02-16T15:28:07.131+0000] {local_task_job_runner.py:234} INFO - Task exited with return code 0
+[2026-02-16T15:28:07.173+0000] {taskinstance.py:3280} INFO - 1 downstream tasks scheduled from follow-on schedule check
