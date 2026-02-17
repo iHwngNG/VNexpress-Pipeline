@@ -1,5 +1,57 @@
-.venv
-requirements.txt
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables
 .env
-SETUP.md
-logs
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Airflow & Docker Data (Local mounts)
+airflow-data/
+postgres-db-volume/
+chromadb-data/
+chroma_db/
+airflow_task_storage/
+tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

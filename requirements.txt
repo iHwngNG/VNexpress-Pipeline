@@ -1,0 +1,79 @@
+# ============================================================================
+# CORE DEPENDENCIES
+# ============================================================================
+
+# Apache Airflow (already in base image, but listing for reference)
+# apache-airflow==2.8.1
+
+# Data Processing
+pandas>=2.0.0
+pyarrow>=14.0.0
+numpy>=1.24.0
+
+# ============================================================================
+# WEB SCRAPING & HTTP
+# ============================================================================
+
+# HTTP Requests
+requests>=2.31.0
+urllib3>=2.0.0
+
+# HTML/XML Parsing
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# ============================================================================
+# EMBEDDING & VECTOR DATABASE
+# ============================================================================
+
+# Sentence Transformers (CPU-friendly embeddings)
+sentence-transformers>=2.2.0
+torch>=2.0.0
+transformers>=4.30.0
+
+# ChromaDB (Vector Database)
+chromadb>=0.4.22
+
+# OpenAI (Optional - for API-based embeddings)
+openai>=1.0.0
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+
+# Logging & Monitoring
+python-json-logger>=2.0.0
+
+# Date/Time
+python-dateutil>=2.8.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Email Validation (required by chromadb)
+email-validator>=2.0.0
+
+# ============================================================================
+# DEVELOPMENT & TESTING (Optional)
+# ============================================================================
+
+# Testing
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+
+# Code Quality
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+
+# ============================================================================
+# NOTES
+# ============================================================================
+
+# For GPU support (when available), install:
+# torch>=2.0.0 --index-url https://download.pytorch.org/whl/cu118
+
+# For production, pin exact versions:
+# pandas==2.1.4
+# pyarrow==14.0.1
+# etc.

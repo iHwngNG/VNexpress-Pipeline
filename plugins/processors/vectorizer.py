@@ -409,6 +409,92 @@ class TextVectorizer:
             "embedding_dimension": self.embedding_model.get_dimension(),
         }
 
+    def check_article_exists(self, article_link: str) -> bool:
+        """
+        Check if article already exists in ChromaDB
+
+        Args:
+            article_link: URL of the article
+
+        Returns:
+            True if article exists, False otherwise
+        """
+        try:
+            # Query by link metadata
+            results = self.collection.get(where={"link": article_link}, limit=1)
+
+            # If we get any results, article exists
+            exists = len(results["ids"]) > 0
+
+            if exists:
+                logger.debug(f"Article already exists: {article_link}")
+
+            return exists
+
+        except Exception as e:
+            logger.error(f"Error checking article existence: {e}")
+            return False
+
+    def filter_new_chunks(
+        self,
+        chunks: Union[List[Dict], pd.DataFrame, pa.Table],
+        link_field: str = "link",
+    ) -> List[Dict]:
+        """
+        Filter out chunks from articles that already exist in ChromaDB
+
+        Args:
+            chunks: List of chunks or DataFrame
+            link_field: Field name for article link
+
+        Returns:
+            List of chunks from new articles only
+        """
+        # Convert to list of dicts
+        if isinstance(chunks, pd.DataFrame):
+            chunks_list = chunks.to_dict("records")
+        elif isinstance(chunks, pa.Table):
+            chunks_list = chunks.to_pandas().to_dict("records")
+        else:
+            chunks_list = chunks
+
+        if not chunks_list:
+            return []
+
+        logger.info(f"🔍 Checking {len(chunks_list)} chunks for duplicates...")
+
+        # Group chunks by article link
+        articles_map = {}
+        for chunk in chunks_list:
+            link = chunk.get(link_field)
+            if link:
+                if link not in articles_map:
+                    articles_map[link] = []
+                articles_map[link].append(chunk)
+
+        logger.info(f"   Found {len(articles_map)} unique articles")
+
+        # Check which articles are new
+        new_chunks = []
+        existing_count = 0
+        new_count = 0
+
+        for link, article_chunks in articles_map.items():
+            if self.check_article_exists(link):
+                existing_count += 1
+                logger.info(f"   ⏭️  Skipping existing article: {link}")
+            else:
+                new_count += 1
+                new_chunks.extend(article_chunks)
+
+        logger.info(f"\n📊 Duplicate Check Results:")
+        logger.info(f"   Total articles: {len(articles_map)}")
+        logger.info(f"   Existing (skipped): {existing_count}")
+        logger.info(f"   New (to process): {new_count}")
+        logger.info(f"   Total chunks to vectorize: {len(new_chunks)}")
+
+        return new_chunks
+
 
 # ============================================================================
 # UTILITY FUNCTIONS
