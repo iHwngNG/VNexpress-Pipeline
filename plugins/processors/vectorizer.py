@@ -203,6 +203,8 @@ class TextVectorizer:
         self,
         embedding_model: BaseEmbedding = None,
         chroma_path: str = "./chroma_db",
+        chroma_host: Optional[str] = None,
+        chroma_port: Optional[int] = 8000,
         collection_name: str = "news_articles",
     ):
         """
@@ -210,7 +212,9 @@ class TextVectorizer:
 
         Args:
             embedding_model: Embedding model instance
-            chroma_path: Path to ChromaDB storage
+            chroma_path: Path to local ChromaDB storage (if host is None)
+            chroma_host: ChromaDB server host (optional, implies HttpClient)
+            chroma_port: ChromaDB server port (default 8000)
             collection_name: ChromaDB collection name
         """
         # Default to Sentence Transformers (CPU-friendly)
@@ -222,12 +226,25 @@ class TextVectorizer:
 
         self.embedding_model = embedding_model
         self.chroma_path = chroma_path
+        self.chroma_host = chroma_host
+        self.chroma_port = chroma_port
         self.collection_name = collection_name
 
         # Initialize ChromaDB
-        self.client = chromadb.PersistentClient(
-            path=chroma_path, settings=Settings(anonymized_telemetry=False)
-        )
+        if self.chroma_host:
+            logger.info(
+                f"🔌 Connecting to ChromaDB Server at {chroma_host}:{chroma_port}..."
+            )
+            self.client = chromadb.HttpClient(
+                host=chroma_host,
+                port=chroma_port,
+                settings=Settings(anonymized_telemetry=False),
+            )
+        else:
+            logger.info(f"📂 Using local ChromaDB at {chroma_path}...")
+            self.client = chromadb.PersistentClient(
+                path=chroma_path, settings=Settings(anonymized_telemetry=False)
+            )
 
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
@@ -241,7 +258,10 @@ class TextVectorizer:
         logger.info(f"✅ Vectorizer initialized")
         logger.info(f"   Model: {self.embedding_model.get_model_name()}")
         logger.info(f"   Dimension: {self.embedding_model.get_dimension()}")
-        logger.info(f"   ChromaDB: {chroma_path}")
+        if self.chroma_host:
+            logger.info(f"   ChromaDB: Server ({chroma_host}:{chroma_port})")
+        else:
+            logger.info(f"   ChromaDB: Local ({chroma_path})")
         logger.info(f"   Collection: {collection_name}")
 
     def vectorize_chunks(
@@ -567,6 +587,8 @@ def create_vectorizer(
     vectorizer = TextVectorizer(
         embedding_model=embedding_model,
         chroma_path=chroma_path,
+        chroma_host=kwargs.get("chroma_host"),
+        chroma_port=kwargs.get("chroma_port", 8000),
         collection_name=collection_name,
     )
 

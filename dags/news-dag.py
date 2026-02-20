@@ -10,6 +10,7 @@ import logging
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import os
 
 # Import custom modules
 # Import từ plugins folder (Airflow tự động add plugins vào PYTHONPATH)
@@ -686,11 +687,24 @@ def vnexpress_etl_pipeline():
         try:
             # Create vectorizer
             logger.info("🔄 Creating vectorizer...")
+
+            # ChromaDB Config
+            chroma_host = os.getenv("CHROMA_HOST")
+            chroma_port = int(os.getenv("CHROMA_PORT", 8000))
+            chroma_path = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+
+            # If CHROMA_HOST is set to 'chromadb' (default in docker-compose), use it.
+            # If it's empty, use local path.
+            if not chroma_host:
+                chroma_host = None
+
             vectorizer = create_vectorizer(
                 model_type="sentence-transformers",
                 model_name="all-MiniLM-L6-v2",  # CPU-friendly model
                 device="cpu",
-                chroma_path="./chroma_db",
+                chroma_path=chroma_path,
+                chroma_host=chroma_host,
+                chroma_port=chroma_port,
                 collection_name="news_articles",
             )
 
